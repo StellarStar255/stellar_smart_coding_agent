@@ -1,1 +1,4 @@
-# stellar_smart_coding_agent
+# Stellar Smart Coding Agent
+
+## Repo
+
