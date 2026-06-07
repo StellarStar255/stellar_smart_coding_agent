@@ -40,14 +40,20 @@ python -m stellar
 python -m stellar --provider openai            # 临时切到 OpenAI
 python -m stellar --model claude-opus-4-8       # 指定模型
 python -m stellar -p "帮我把 utils.py 重构一下"   # 单次执行后退出
-python -m stellar --resume                       # 恢复上次会话
+python -m stellar --session login-ui            # 使用/新建名为 login-ui 的会话
+python -m stellar --resume                       # 恢复最近一次会话
+python -m stellar --resume login-ui             # 恢复指定名字的会话
 python -m stellar --yolo                         # 跳过所有确认（慎用）
 ```
+
+> 安装成全局命令后（见 [安装与设置文档](docs/安装与设置.md)），上面的 `python -m stellar` 都可直接换成 `stellar`，且会在你**当前所在目录**启动。
 
 > 也可以用一键脚本 `./run.sh`（自动建 venv、装依赖、检查 .env），参数会原样透传：
 > `./run.sh --resume`、`./run.sh -p "..."` 等。
 
-REPL 里的命令：`/help` `/clear` `/compact` `/tokens` `/yolo` `/exit`
+REPL 里的命令：
+- 基础：`/help` `/clear` `/compact` `/tokens` `/yolo` `/exit`
+- 多会话：`/sessions`（列出全部）、`/session <名字>`（切换/新建）、`/new [名字]`（开新会话）、`/delete <名字>`（删除）
 
 ---
 
@@ -107,15 +113,15 @@ Claude 和 OpenAI 的工具调用格式完全不同：
 ## 已实现的进阶功能
 
 - **联网**：`web_fetch`（抓网页转文本）、`web_search`（DuckDuckGo，无需 key）。
-- **对话持久化 + `--resume`**：每回合自动存到 `.stellar/session.json`，可恢复。
+- **多会话 + 持久化**：每回合自动存到 `.stellar/sessions/<名字>.json`；支持命名、`/sessions` 列表、切换、删除、`--resume` 恢复。
 - **流式显示工具调用**：模型一决定调用工具就实时提示「→ 准备调用 X…」。
 - **diff 预览**：写/编辑文件在确认前展示彩色 unified diff，看清改动再批准。
+- **健壮性**：失败回合自动回滚，避免破坏 user/assistant 交替；非 UTF-8 终端下中文输入不崩溃。
 
 ## 可以继续扩展的方向
 
 - 更细的权限粒度（按路径/命令白名单）
 - MCP（Model Context Protocol）支持，接入外部工具服务
-- 多会话管理（命名 session、`/sessions` 列表）
 - 更精确的 token 计数与成本统计
 
 ---

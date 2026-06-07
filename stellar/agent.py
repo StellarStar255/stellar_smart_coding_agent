@@ -62,7 +62,17 @@ class Agent:
         """处理一次用户输入，跑完整个 agentic loop 直到不再需要工具。"""
         self.history.add_user(user_input)
         self._maybe_compact()
+        try:
+            self._loop()
+        except BaseException:
+            # 回合失败（模型报错/用户中断）：回滚到一个干净状态，
+            # 避免历史里留下「悬空的 user 消息」或「未应答的 tool_calls」，
+            # 否则下一回合会破坏 user/assistant 交替，导致模型 API 报错。
+            self._trim_to_clean_state()
+            self._save_session()
+            raise
 
+    def _loop(self) -> None:
         while True:
             assistant_msg = self._call_model(stream_to_ui=self.interactive)
             self.history.add(
@@ -165,6 +175,19 @@ class Agent:
 
             results.append(ToolResult(tc.id, out_content, is_error))
         return results
+
+    def _trim_to_clean_state(self) -> None:
+        """把历史回滚到最近一条「无待办工具调用的 assistant 回复」处。
+
+        丢弃失败回合留下的不完整片段（悬空 user / 未应答的 tool_calls /
+        孤立的 tool 结果），保证下一回合历史结构合法。
+        """
+        msgs = self.history.messages
+        while msgs:
+            last = msgs[-1]
+            if last.role == "assistant" and not last.tool_calls:
+                break
+            msgs.pop()
 
     # ---------- 会话持久化与多会话切换 ----------
 
