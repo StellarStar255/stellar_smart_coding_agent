@@ -72,6 +72,7 @@ def handle_command(cmd: str, agent: Agent) -> bool:
 
 
 def main() -> int:
+    ui.ensure_utf8_io()  # 兜底：保证中文等多字节输入不会因终端编码崩溃
     args = parse_args()
     config = build_config(args)
 

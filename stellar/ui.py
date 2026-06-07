@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import sys
 from typing import Any
 
 try:
@@ -15,6 +16,20 @@ try:
     _console: Console | None = Console()
 except ImportError:  # rich 可选
     _console = None
+
+
+def ensure_utf8_io() -> None:
+    """强制把 stdin/stdout/stderr 切到 UTF-8。
+
+    某些终端/locale（如 C/POSIX）下，Python 默认用非 UTF-8 编码读 stdin，
+    输入中文等多字节字符时 input() 会抛 UnicodeDecodeError。这里统一兜底。
+    """
+    for stream in (sys.stdin, sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
+        except (AttributeError, ValueError):
+            # 流被重定向/不支持 reconfigure 时忽略
+            pass
 
 
 def _plain(*args: Any) -> None:
@@ -144,7 +159,7 @@ def confirm(name: str, preview: str) -> str:
     else:
         _plain(f"\n需要确认 {name}: {preview}\n允许? (y/a/n) ", end="")
     try:
-        ans = input().strip().lower()
+        ans = _safe_input().strip().lower()
     except EOFError:
         return "n"
     if ans in ("y", "yes", ""):
@@ -168,8 +183,18 @@ def error(msg: str) -> None:
         _plain(msg)
 
 
+def _safe_input() -> str:
+    """读一行输入，碰到无法解码的字节时不崩溃，提示用户重输。"""
+    try:
+        return input()
+    except UnicodeDecodeError:
+        error("（输入编码无法识别，已忽略本行，请重新输入）")
+        return ""
+
+
 def user_prompt() -> str:
     if _console:
         _console.print("\n[bold cyan]›[/] ", end="")
-        return input()
-    return input("\n› ")
+    else:
+        print("\n› ", end="", flush=True)
+    return _safe_input()
