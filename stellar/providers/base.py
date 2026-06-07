@@ -1,0 +1,32 @@
+"""Provider 抽象：把统一的内部消息格式翻译给具体模型 API。
+
+这是支持「多模型」的关键。agent 核心只依赖这个接口，
+不关心底层是 Claude 的 tool_use 还是 OpenAI 的 function calling。
+"""
+
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from collections.abc import Iterator
+
+from ..messages import Message, StreamEvent, ToolSpec
+
+
+class Provider(ABC):
+    """所有模型 provider 的统一接口。"""
+
+    model: str
+
+    @abstractmethod
+    def stream(
+        self,
+        system: str,
+        messages: list[Message],
+        tools: list[ToolSpec],
+    ) -> Iterator[StreamEvent]:
+        """流式生成一个 assistant 回合。
+
+        产出一串 TextDelta（用于实时显示），最后产出一个 Done
+        （携带完整的 AssistantMessage，包含 text + tool_calls + usage）。
+        """
+        raise NotImplementedError

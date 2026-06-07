@@ -42,3 +42,5 @@ GetNewPython.py
 TraeStarterMac.py
 
 .DS_Store
+
+.env
