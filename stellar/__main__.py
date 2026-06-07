@@ -11,11 +11,14 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 
 from .agent import Agent
 from .config import Config
 from . import ui
+
+SESSION_FILE = os.path.join(".stellar", "session.json")
 
 
 def parse_args() -> argparse.Namespace:
@@ -25,6 +28,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--workdir", default=".", help="工作目录")
     p.add_argument("--yolo", action="store_true", help="跳过所有权限确认")
     p.add_argument("-p", "--prompt", help="单次执行该提示后退出（非交互）")
+    p.add_argument("--resume", action="store_true", help="恢复上次会话历史")
     return p.parse_args()
 
 
@@ -71,12 +75,21 @@ def main() -> int:
     args = parse_args()
     config = build_config(args)
 
+    session_path = os.path.join(config.workdir, SESSION_FILE)
     try:
-        agent = Agent(config, interactive=not args.prompt)
+        agent = Agent(
+            config, interactive=not args.prompt, session_path=session_path
+        )
     except Exception as e:  # noqa: BLE001
         ui.error(f"初始化失败: {e}")
         ui.error("请检查 .env 里的 API key（参考 .env.example）。")
         return 1
+
+    if args.resume:
+        if agent.history.load(session_path):
+            ui.info(f"已恢复上次会话（{len(agent.history.messages)} 条消息）。")
+        else:
+            ui.info("没有找到可恢复的会话，将开始新会话。")
 
     # 单次非交互模式
     if args.prompt:

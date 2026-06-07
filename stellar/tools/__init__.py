@@ -10,6 +10,7 @@ from .grep import GrepTool
 from .ls import LSTool
 from .read_file import ReadFileTool
 from .todo import TodoWriteTool
+from .web import WebFetchTool, WebSearchTool
 from .write_file import WriteFileTool
 
 
@@ -24,6 +25,8 @@ def default_tools(include_task: bool = True) -> list[Tool]:
         GlobTool(),
         LSTool(),
         TodoWriteTool(),
+        WebFetchTool(),
+        WebSearchTool(),
     ]
     if include_task:
         from .task import TaskTool

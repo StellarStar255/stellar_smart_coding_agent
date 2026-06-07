@@ -17,6 +17,7 @@ from ..messages import (
     StreamEvent,
     TextDelta,
     ToolCall,
+    ToolCallStart,
     ToolSpec,
     Usage,
 )
@@ -129,6 +130,9 @@ class OpenAIProvider(Provider):
                     if tc.id:
                         slot["id"] = tc.id
                     if tc.function and tc.function.name:
+                        # 首次拿到名字时，发一个「工具开始」事件给 UI
+                        if not slot["name"]:
+                            yield ToolCallStart(tc.function.name)
                         slot["name"] = tc.function.name
                     if tc.function and tc.function.arguments:
                         slot["args"] += tc.function.arguments

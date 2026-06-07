@@ -40,8 +40,12 @@ python -m stellar
 python -m stellar --provider openai            # 临时切到 OpenAI
 python -m stellar --model claude-opus-4-8       # 指定模型
 python -m stellar -p "帮我把 utils.py 重构一下"   # 单次执行后退出
+python -m stellar --resume                       # 恢复上次会话
 python -m stellar --yolo                         # 跳过所有确认（慎用）
 ```
+
+> 也可以用一键脚本 `./run.sh`（自动建 venv、装依赖、检查 .env），参数会原样透传：
+> `./run.sh --resume`、`./run.sh -p "..."` 等。
 
 REPL 里的命令：`/help` `/clear` `/compact` `/tokens` `/yolo` `/exit`
 
@@ -55,9 +59,9 @@ REPL 里的命令：`/help` `/clear` `/compact` `/tokens` `/yolo` `/exit`
 | `providers/` | 模型抽象层：把统一消息格式翻译成各家 API | 模型适配 |
 | `providers/anthropic_provider.py` | Claude 的 `tool_use` 流式解析 | — |
 | `providers/openai_provider.py` | OpenAI `function calling` 流式拼接 | — |
-| `tools/` | 工具集：读/写/编辑文件、bash、grep、glob、ls、todo、子agent | Read/Write/Edit/Bash/Grep/Glob/LS/TodoWrite/Task |
-| `permissions.py` | 有副作用的操作需用户确认 | 权限系统 |
-| `history.py` | 对话历史 + 自动压缩 | `/compact` |
+| `tools/` | 工具集：读/写/编辑文件、bash、grep、glob、ls、todo、联网、子agent | Read/Write/Edit/Bash/Grep/Glob/LS/TodoWrite/WebFetch/WebSearch/Task |
+| `permissions.py` | 有副作用的操作需用户确认（确认前展示彩色 diff） | 权限系统 |
+| `history.py` | 对话历史 + 自动压缩 + 存盘/恢复 | `/compact`、`--resume` |
 | `prompts.py` | system prompt（agent 的「人格」） | 系统提示词 |
 | `messages.py` | 与模型无关的统一消息结构 | — |
 | `ui.py` | 终端流式渲染、工具展示、确认提示 | 终端 UI |
@@ -100,13 +104,18 @@ Claude 和 OpenAI 的工具调用格式完全不同：
 
 ---
 
+## 已实现的进阶功能
+
+- **联网**：`web_fetch`（抓网页转文本）、`web_search`（DuckDuckGo，无需 key）。
+- **对话持久化 + `--resume`**：每回合自动存到 `.stellar/session.json`，可恢复。
+- **流式显示工具调用**：模型一决定调用工具就实时提示「→ 准备调用 X…」。
+- **diff 预览**：写/编辑文件在确认前展示彩色 unified diff，看清改动再批准。
+
 ## 可以继续扩展的方向
 
-- 流式显示工具参数（边生成边展示）
 - 更细的权限粒度（按路径/命令白名单）
-- `WebFetch` / `WebSearch` 工具
 - MCP（Model Context Protocol）支持，接入外部工具服务
-- 对话持久化与 `--resume`
+- 多会话管理（命名 session、`/sessions` 列表）
 - 更精确的 token 计数与成本统计
 
 ---

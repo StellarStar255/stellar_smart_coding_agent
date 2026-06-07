@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+import json
+import os
 from collections.abc import Callable
 
 from .messages import Message
@@ -28,6 +30,30 @@ class History:
 
     def needs_compaction(self, threshold: int) -> bool:
         return self.last_input_tokens > threshold
+
+    # ---- 持久化（用于 --resume）----
+
+    def save(self, path: str) -> None:
+        os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+        data = {
+            "last_input_tokens": self.last_input_tokens,
+            "messages": [m.to_dict() for m in self.messages],
+        }
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+
+    def load(self, path: str) -> bool:
+        """从文件恢复历史，成功返回 True。"""
+        if not os.path.isfile(path):
+            return False
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            return False
+        self.messages = [Message.from_dict(d) for d in data.get("messages", [])]
+        self.last_input_tokens = data.get("last_input_tokens", 0)
+        return True
 
     def compact(
         self,

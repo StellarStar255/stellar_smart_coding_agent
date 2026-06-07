@@ -16,6 +16,7 @@ from ..messages import (
     StreamEvent,
     TextDelta,
     ToolCall,
+    ToolCallStart,
     ToolSpec,
     Usage,
 )
@@ -98,6 +99,11 @@ class AnthropicProvider(Provider):
                     and event.delta.type == "text_delta"
                 ):
                     yield TextDelta(event.delta.text)
+                elif (
+                    event.type == "content_block_start"
+                    and event.content_block.type == "tool_use"
+                ):
+                    yield ToolCallStart(event.content_block.name)
             final = stream.get_final_message()
 
         text = ""

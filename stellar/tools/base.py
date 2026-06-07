@@ -6,11 +6,24 @@
 
 from __future__ import annotations
 
+import difflib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
 
 from ..messages import ToolSpec
+
+
+def make_diff(old: str, new: str, path: str) -> str:
+    """生成 unified diff 文本。无变化则返回空串。"""
+    diff = difflib.unified_diff(
+        old.splitlines(),
+        new.splitlines(),
+        fromfile=f"a/{path}",
+        tofile=f"b/{path}",
+        lineterm="",
+    )
+    return "\n".join(diff)
 
 
 @dataclass
@@ -44,6 +57,13 @@ class Tool(ABC):
     def preview(self, args: dict[str, Any]) -> str:
         """权限确认时，向用户展示「将要做什么」的简短描述。"""
         return f"{self.name}({args})"
+
+    def diff_preview(self, args: dict[str, Any], ctx: "ToolContext") -> str | None:
+        """确认前展示给用户的 unified diff（无则返回 None）。
+
+        写文件/编辑文件类工具可重写它，让用户在批准前看清改动。
+        """
+        return None
 
     @abstractmethod
     def run(self, args: dict[str, Any], ctx: ToolContext) -> ToolOutput:

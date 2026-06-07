@@ -70,11 +70,42 @@ def end_line() -> None:
         print()
 
 
+def stream_tool_start(name: str) -> None:
+    """流式中：模型刚决定调用某工具时的实时提示。"""
+    if _console:
+        _console.print(f"\n  [dim]→ 准备调用 [yellow]{name}[/yellow]…[/dim]")
+    else:
+        _plain(f"\n  → 准备调用 {name}…")
+
+
 def tool_call(name: str, preview: str) -> None:
     if _console:
         _console.print(f"  [yellow]⚙ {name}[/] [dim]{preview}[/]")
     else:
         _plain(f"  ⚙ {name}  {preview}")
+
+
+def diff(diff_text: str, max_lines: int = 40) -> None:
+    """渲染彩色 unified diff。"""
+    lines = diff_text.splitlines()
+    truncated = len(lines) > max_lines
+    lines = lines[:max_lines]
+    if _console:
+        out = []
+        for ln in lines:
+            if ln.startswith("+") and not ln.startswith("+++"):
+                out.append(f"[green]{ln}[/green]")
+            elif ln.startswith("-") and not ln.startswith("---"):
+                out.append(f"[red]{ln}[/red]")
+            elif ln.startswith("@@"):
+                out.append(f"[cyan]{ln}[/cyan]")
+            else:
+                out.append(f"[dim]{ln}[/dim]")
+        if truncated:
+            out.append("[dim]…(diff 过长已截断)[/dim]")
+        _console.print(Panel("\n".join(out), title="改动预览", border_style="yellow", expand=False))
+    else:
+        _plain("\n".join(lines) + ("\n…(已截断)" if truncated else ""))
 
 
 def tool_result(content: str, is_error: bool, max_lines: int = 12) -> None:

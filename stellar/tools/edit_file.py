@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from .base import Tool, ToolContext, ToolOutput
+from .base import Tool, ToolContext, ToolOutput, make_diff
 
 
 class EditFileTool(Tool):
@@ -31,6 +31,25 @@ class EditFileTool(Tool):
 
     def preview(self, args: dict[str, Any]) -> str:
         return f"编辑文件 {args.get('path')}（替换一段文本）"
+
+    def diff_preview(self, args: dict[str, Any], ctx: ToolContext) -> str | None:
+        path = os.path.join(ctx.workdir, args.get("path", ""))
+        if not os.path.isfile(path):
+            return None
+        try:
+            with open(path, encoding="utf-8") as f:
+                old = f.read()
+        except OSError:
+            return None
+        olds = args.get("old_string", "")
+        news = args.get("new_string", "")
+        if olds not in old:
+            return None
+        if args.get("replace_all"):
+            new = old.replace(olds, news)
+        else:
+            new = old.replace(olds, news, 1)
+        return make_diff(old, new, args.get("path", "")) or None
 
     def run(self, args: dict[str, Any], ctx: ToolContext) -> ToolOutput:
         path = os.path.join(ctx.workdir, args["path"])

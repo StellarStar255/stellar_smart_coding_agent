@@ -19,6 +19,7 @@ from .messages import (
     Done,
     Message,
     TextDelta,
+    ToolCallStart,
     ToolResult,
 )
 from .permissions import PermissionManager
@@ -36,6 +37,7 @@ class Agent:
         tools: list[Tool] | None = None,
         system_prompt: str | None = None,
         interactive: bool = True,
+        session_path: str | None = None,
     ):
         self.config = config
         self.provider = provider or build_provider(config)
@@ -45,6 +47,8 @@ class Agent:
         self.history = History()
         self.permissions = PermissionManager(yolo=config.yolo)
         self.interactive = interactive
+        # 会话持久化文件路径（None 表示不持久化，如子 agent）
+        self.session_path = session_path
         self.ctx = ToolContext(workdir=config.workdir)
         # 给 task 工具注入「创建子 agent」的能力
         self.ctx.extras["subagent_factory"] = self._run_subagent
@@ -67,10 +71,12 @@ class Agent:
             )
 
             if not assistant_msg.tool_calls:
+                self._save_session()
                 return  # 模型不再需要工具，回合结束
 
             results = self._execute_tools(assistant_msg)
             self.history.add(Message(role="tool", tool_results=results))
+            self._save_session()
             # 继续循环：把工具结果喂回模型
 
     def _call_model(self, stream_to_ui: bool) -> AssistantMessage:
@@ -86,6 +92,10 @@ class Agent:
                 if stream_to_ui:
                     ui.stream_text(event.text)
                     printed_any = True
+            elif isinstance(event, ToolCallStart):
+                if stream_to_ui:
+                    ui.stream_tool_start(event.name)
+                    printed_any = False  # 已换行，无需再补行
             elif isinstance(event, Done):
                 final = event.message
         if stream_to_ui and printed_any:
@@ -109,6 +119,10 @@ class Agent:
             preview = tool.preview(tc.arguments)
             if self.interactive:
                 ui.tool_call(tc.name, preview)
+                # diff 预览：写/编辑文件类工具在确认前展示改动
+                diff_text = tool.diff_preview(tc.arguments, self.ctx)
+                if diff_text:
+                    ui.diff(diff_text)
 
             # 权限确认
             if tool.requires_permission and not self.permissions.is_pre_approved(
@@ -148,6 +162,16 @@ class Agent:
 
             results.append(ToolResult(tc.id, out_content, is_error))
         return results
+
+    # ---------- 会话持久化 ----------
+
+    def _save_session(self) -> None:
+        if not self.session_path:
+            return
+        try:
+            self.history.save(self.session_path)
+        except OSError:
+            pass  # 存档失败不应中断对话
 
     # ---------- 历史压缩 ----------
 

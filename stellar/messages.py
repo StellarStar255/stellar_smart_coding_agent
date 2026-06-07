@@ -44,6 +44,39 @@ class Message:
     tool_calls: list[ToolCall] = field(default_factory=list)
     tool_results: list[ToolResult] = field(default_factory=list)
 
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "role": self.role,
+            "text": self.text,
+            "tool_calls": [
+                {"id": tc.id, "name": tc.name, "arguments": tc.arguments}
+                for tc in self.tool_calls
+            ],
+            "tool_results": [
+                {
+                    "tool_call_id": r.tool_call_id,
+                    "content": r.content,
+                    "is_error": r.is_error,
+                }
+                for r in self.tool_results
+            ],
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> "Message":
+        return cls(
+            role=d["role"],
+            text=d.get("text", ""),
+            tool_calls=[
+                ToolCall(tc["id"], tc["name"], tc["arguments"])
+                for tc in d.get("tool_calls", [])
+            ],
+            tool_results=[
+                ToolResult(r["tool_call_id"], r["content"], r.get("is_error", False))
+                for r in d.get("tool_results", [])
+            ],
+        )
+
 
 @dataclass
 class Usage:
@@ -79,13 +112,20 @@ class TextDelta:
 
 
 @dataclass
+class ToolCallStart:
+    """流式中模型刚开始调用某工具（名字已知，参数还在生成）。"""
+
+    name: str
+
+
+@dataclass
 class Done:
     """一个回合结束，携带完整的 AssistantMessage。"""
 
     message: AssistantMessage
 
 
-StreamEvent = TextDelta | Done
+StreamEvent = TextDelta | ToolCallStart | Done
 
 
 @dataclass

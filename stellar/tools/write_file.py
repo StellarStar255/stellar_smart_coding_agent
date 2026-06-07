@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from .base import Tool, ToolContext, ToolOutput
+from .base import Tool, ToolContext, ToolOutput, make_diff
 
 
 class WriteFileTool(Tool):
@@ -24,6 +24,17 @@ class WriteFileTool(Tool):
     def preview(self, args: dict[str, Any]) -> str:
         n = len(args.get("content", "").splitlines())
         return f"写入文件 {args.get('path')}  ({n} 行)"
+
+    def diff_preview(self, args: dict[str, Any], ctx: ToolContext) -> str | None:
+        path = os.path.join(ctx.workdir, args.get("path", ""))
+        old = ""
+        if os.path.isfile(path):
+            try:
+                with open(path, encoding="utf-8") as f:
+                    old = f.read()
+            except OSError:
+                return None
+        return make_diff(old, args.get("content", ""), args.get("path", "")) or None
 
     def run(self, args: dict[str, Any], ctx: ToolContext) -> ToolOutput:
         path = os.path.join(ctx.workdir, args["path"])
