@@ -4,11 +4,18 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from pathlib import Path
 
 try:
     from dotenv import load_dotenv
 
+    # 先加载当前目录的 .env（每个项目可有自己的覆盖配置），
+    # 再加载本程序安装目录的 .env 作为兜底——这样在任意文件夹下
+    # 输入 stellar 启动时，都能找到 API key。
+    # load_dotenv 默认不覆盖已存在的变量，所以「先加载的优先」。
     load_dotenv()
+    _pkg_root = Path(__file__).resolve().parent.parent
+    load_dotenv(_pkg_root / ".env")
 except ImportError:  # dotenv 可选
     pass
 
