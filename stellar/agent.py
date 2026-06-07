@@ -25,6 +25,7 @@ from .messages import (
 from .permissions import PermissionManager
 from .prompts import SUBAGENT_SYSTEM_PROMPT, build_system_prompt
 from .providers import Provider, build_provider
+from .sessions import SessionManager
 from .tools import Tool, ToolContext, default_tools
 from . import ui
 
@@ -37,7 +38,8 @@ class Agent:
         tools: list[Tool] | None = None,
         system_prompt: str | None = None,
         interactive: bool = True,
-        session_path: str | None = None,
+        sessions: "SessionManager | None" = None,
+        session_name: str | None = None,
     ):
         self.config = config
         self.provider = provider or build_provider(config)
@@ -47,8 +49,9 @@ class Agent:
         self.history = History()
         self.permissions = PermissionManager(yolo=config.yolo)
         self.interactive = interactive
-        # 会话持久化文件路径（None 表示不持久化，如子 agent）
-        self.session_path = session_path
+        # 多会话管理（None 表示不持久化，如子 agent）
+        self.sessions = sessions
+        self.session_name = session_name
         self.ctx = ToolContext(workdir=config.workdir)
         # 给 task 工具注入「创建子 agent」的能力
         self.ctx.extras["subagent_factory"] = self._run_subagent
@@ -163,15 +166,36 @@ class Agent:
             results.append(ToolResult(tc.id, out_content, is_error))
         return results
 
-    # ---------- 会话持久化 ----------
+    # ---------- 会话持久化与多会话切换 ----------
 
     def _save_session(self) -> None:
-        if not self.session_path:
+        if not self.sessions or not self.session_name:
             return
         try:
-            self.history.save(self.session_path)
+            self.history.save(self.sessions.path(self.session_name))
         except OSError:
             pass  # 存档失败不应中断对话
+
+    def switch_session(self, name: str) -> bool:
+        """切换到（不存在则新建）名为 name 的会话。返回是否加载到已有历史。"""
+        self._save_session()  # 先存当前会话
+        self.session_name = name
+        self.history = History()
+        self.ctx.state.clear()
+        if self.sessions and self.sessions.exists(name):
+            return self.history.load(self.sessions.path(name))
+        return False
+
+    def new_session(self, name: str | None = None) -> str:
+        """开一个全新会话（自动命名或指定名字）。返回会话名。"""
+        self._save_session()
+        if self.sessions:
+            self.session_name = name or self.sessions.default_name()
+        else:
+            self.session_name = name
+        self.history = History()
+        self.ctx.state.clear()
+        return self.session_name or ""
 
     # ---------- 历史压缩 ----------
 

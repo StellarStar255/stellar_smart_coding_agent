@@ -51,17 +51,48 @@ def banner(provider: str, model: str, workdir: str) -> None:
 
 def help_text() -> None:
     lines = [
-        "/help     显示帮助",
-        "/exit     退出（Ctrl-D 同样）",
-        "/clear    清空对话历史",
-        "/compact  手动压缩历史",
-        "/tokens   显示上一回合 token 用量",
-        "/yolo     切换 yolo 模式（跳过所有确认）",
+        "/help            显示帮助",
+        "/exit            退出（Ctrl-D 同样）",
+        "/clear           清空当前会话历史",
+        "/compact         手动压缩历史",
+        "/tokens          显示上一回合 token 用量",
+        "/yolo            切换 yolo 模式（跳过所有确认）",
+        "",
+        "/sessions        列出所有会话",
+        "/session <名字>  切换/新建到指定会话",
+        "/new [名字]      开一个新会话",
+        "/delete <名字>   删除某个会话",
     ]
     if _console:
         _console.print(Panel("\n".join(lines), title="命令", border_style="dim"))
     else:
         _plain("\n".join(lines))
+
+
+def sessions_list(infos: list[Any], current: str | None) -> None:
+    """渲染会话列表。infos 是 SessionInfo 列表。"""
+    from datetime import datetime
+
+    if not infos:
+        info("（还没有任何会话）")
+        return
+    rows = []
+    for i, s in enumerate(infos, 1):
+        mark = "[green]●[/]" if s.name == current else " "
+        when = datetime.fromtimestamp(s.modified).strftime("%m-%d %H:%M")
+        preview = (s.preview or "").replace("\n", " ")
+        if _console:
+            rows.append(
+                f"{mark} [bold]{s.name}[/]  [dim]{s.num_messages}条 · {when}[/]\n"
+                f"    [dim]{preview}[/]"
+            )
+        else:
+            cur = "*" if s.name == current else " "
+            rows.append(f"{cur} {s.name}  {s.num_messages}条 {when}  {preview}")
+    if _console:
+        _console.print(Panel("\n".join(rows), title="会话列表", border_style="blue"))
+    else:
+        _plain("\n".join(rows))
 
 
 def assistant_prefix() -> None:
