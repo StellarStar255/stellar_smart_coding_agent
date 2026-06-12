@@ -67,7 +67,10 @@ def html_to_text(html: str) -> str:
 
 class WebFetchTool(Tool):
     name = "web_fetch"
-    description = "抓取一个 URL 的内容。HTML 会转成纯文本返回，适合读文档/文章/报错页面。"
+    description = (
+        "抓取一个 URL 的内容。HTML 会转成纯文本返回，适合读文档/文章/报错页面，"
+        "或在 web_search 之后跟进读取结果页面的详细内容。"
+    )
     parameters = {
         "type": "object",
         "properties": {
@@ -91,39 +94,54 @@ class WebFetchTool(Tool):
 
 
 class _DDGParser(HTMLParser):
-    """解析 DuckDuckGo lite 结果页：抓 result link 的标题与 url。"""
+    """解析 DuckDuckGo lite 结果页：抓 result link 的标题、url 和摘要。"""
 
     def __init__(self) -> None:
         super().__init__()
-        self.results: list[tuple[str, str]] = []
+        self.results: list[dict[str, str]] = []
         self._in_result_link = False
+        self._in_snippet = False
         self._href = ""
         self._title_parts: list[str] = []
+        self._snippet_parts: list[str] = []
 
     def handle_starttag(self, tag: str, attrs: Any) -> None:
-        if tag == "a":
-            d = dict(attrs)
-            cls = d.get("class", "") or ""
-            if "result-link" in cls:
-                self._in_result_link = True
-                self._href = d.get("href", "")
-                self._title_parts = []
+        d = dict(attrs)
+        cls = d.get("class", "") or ""
+        if tag == "a" and "result-link" in cls:
+            self._in_result_link = True
+            self._href = d.get("href", "")
+            self._title_parts = []
+        elif tag == "td" and "result-snippet" in cls:
+            self._in_snippet = True
+            self._snippet_parts = []
 
     def handle_endtag(self, tag: str) -> None:
         if tag == "a" and self._in_result_link:
             title = "".join(self._title_parts).strip()
             if title and self._href:
-                self.results.append((title, self._href))
+                self.results.append({"title": title, "href": self._href, "snippet": ""})
             self._in_result_link = False
+        elif tag == "td" and self._in_snippet:
+            snippet = re.sub(r"\s+", " ", "".join(self._snippet_parts)).strip()
+            if snippet and self.results and not self.results[-1]["snippet"]:
+                self.results[-1]["snippet"] = snippet
+            self._in_snippet = False
 
     def handle_data(self, data: str) -> None:
         if self._in_result_link:
             self._title_parts.append(data)
+        elif self._in_snippet:
+            self._snippet_parts.append(data)
 
 
 class WebSearchTool(Tool):
     name = "web_search"
-    description = "用 DuckDuckGo 联网搜索，返回前若干条结果的标题和链接。用于查资料/找文档。"
+    description = (
+        "用 DuckDuckGo 联网搜索，返回前若干条结果的标题、链接和摘要。"
+        "用于查资料、找文档，以及新闻、行情、天气等时效性信息——"
+        "训练数据之外或可能过期的内容都应该先搜索再回答。"
+    )
     parameters = {
         "type": "object",
         "properties": {
@@ -148,11 +166,14 @@ class WebSearchTool(Tool):
         if not parser.results:
             return ToolOutput("(无结果，或页面结构已变化)")
         lines = []
-        for i, (title, href) in enumerate(parser.results[:n], 1):
+        for i, r in enumerate(parser.results[:n], 1):
             # ddg lite 的链接可能是跳转包装，尝试还原真实 url
-            real = href
-            m = re.search(r"uddg=([^&]+)", href)
+            real = r["href"]
+            m = re.search(r"uddg=([^&]+)", real)
             if m:
                 real = urllib.parse.unquote(m.group(1))
-            lines.append(f"{i}. {title}\n   {real}")
+            entry = f"{i}. {r['title']}\n   {real}"
+            if r["snippet"]:
+                entry += f"\n   {r['snippet']}"
+            lines.append(entry)
         return ToolOutput("\n".join(lines))
