@@ -180,16 +180,146 @@ def todos(items: list[dict[str, Any]]) -> None:
         _plain("待办:\n" + "\n".join(lines))
 
 
+# ---- 权限确认：方向键菜单（类似 Claude Code），非 TTY 降级为文本输入 ----
+
+_CONFIRM_OPTIONS = [
+    ("y", "允许（本次）"),
+    ("a", "总是允许（本会话内）"),
+    ("n", "拒绝"),
+]
+
+
+def _menu_supported() -> bool:
+    """方向键菜单需要：双向都是 TTY + termios（即 Unix 终端）。"""
+    try:
+        import termios  # noqa: F401
+    except ImportError:
+        return False
+    return sys.stdin.isatty() and sys.stdout.isatty()
+
+
+def _parse_key(buf: bytes) -> tuple[str | None, bytes]:
+    """从字节缓冲头部解析一个按键，返回 (按键, 剩余字节)。
+
+    方向键翻译成 'up'/'down'，其余 ESC 序列归为 'esc'。
+    序列还没到齐时返回 (None, buf)，由调用方决定继续等还是按裸 Esc 处理。
+    """
+    if not buf:
+        return None, buf
+    if buf[0:1] == b"\x1b":
+        if buf[1:2] == b"[":
+            if len(buf) < 3:
+                return None, buf
+            return {b"A": "up", b"B": "down"}.get(buf[2:3], ""), buf[3:]
+        if len(buf) >= 2:
+            return "esc", buf[1:]
+        return None, buf  # 只有一个 ESC：可能是裸 Esc 键，也可能序列未到齐
+    return buf[0:1].decode("utf-8", "ignore"), buf[1:]
+
+
+def _menu_select(options: list[tuple[str, str]]) -> str:
+    """渲染可上下移动的选择菜单，返回选中项的 value。
+
+    实现是终端 UI 的老把戏：打印 N 行选项，每次按键后光标上移
+    N 行（ESC[NA）原地重绘。两个容易踩的坑：
+    - cbreak 必须覆盖整个菜单期间。若每读一个键就恢复终端模式，
+      两次按键之间到达的输入会被行规程扣住（行缓冲+回显），按键丢失。
+    - 一次 os.read 可能带回多个按键（如快速的「↓ 回车」），
+      所以要用缓冲逐个解析，而不是读一次取一个。
+    """
+    import os
+    import select
+    import termios
+    import tty
+
+    fd = sys.stdin.fileno()
+    old = termios.tcgetattr(fd)
+    idx = 0
+    n = len(options)
+    buf = b""
+    w = sys.stdout
+
+    def next_key() -> str:
+        nonlocal buf
+        while True:
+            key, rest = _parse_key(buf)
+            if key is not None:
+                buf = rest
+                return key
+            # 缓冲为空则一直等；是半截 ESC 序列则只等 50ms，
+            # 等不到后续字节就当裸 Esc 键
+            timeout = 0.05 if buf else None
+            ready, _, _ = select.select([fd], [], [], timeout)
+            if not ready:
+                buf = b""
+                return "esc"
+            data = os.read(fd, 64)
+            if not data:
+                buf = b""
+                return "esc"
+            buf += data
+
+    w.write("\x1b[?25l")  # 隐藏光标，避免重绘闪烁
+    try:
+        tty.setcbreak(fd)  # cbreak 保留 Ctrl-C 信号，用户仍可中断
+        while True:
+            for i, (_, label) in enumerate(options):
+                style = "\x1b[1;36m❯ " if i == idx else "\x1b[2m  "
+                w.write(f"\r\x1b[2K{style}{label}\x1b[0m\n")
+            w.flush()
+            key = next_key()
+            if key == "up":
+                idx = (idx - 1) % n
+            elif key == "down":
+                idx = (idx + 1) % n
+            elif key in ("\r", "\n"):
+                break
+            elif key == "esc":
+                idx = n - 1
+                break
+            else:
+                # y/a/n 快捷键：按下即选中，兼容老习惯
+                for i, (value, _) in enumerate(options):
+                    if key.lower() == value:
+                        idx = i
+                        break
+                else:
+                    continue
+                break
+            w.write(f"\x1b[{n}A")  # 光标回到菜单顶部，下一轮重绘
+        # 选完把菜单擦掉，由调用方打印一行结果，保持输出紧凑
+        w.write(f"\x1b[{n}A")
+        for _ in range(n):
+            w.write("\x1b[2K\n")
+        w.write(f"\x1b[{n}A")
+        return options[idx][0]
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old)
+        w.write("\x1b[?25h")
+        w.flush()
+
+
 def confirm(name: str, preview: str) -> str:
     """返回 'y' / 'a'(always) / 'n'。"""
-    prompt = (
-        f"\n[bold yellow]需要确认[/] {name}: {preview}\n"
-        f"[dim]允许? (y=本次 / a=本会话总是 / n=拒绝)[/] "
-    )
     if _console:
-        _console.print(prompt, end="")
+        _console.print(f"\n[bold yellow]需要确认[/] {name}: {preview}")
     else:
-        _plain(f"\n需要确认 {name}: {preview}\n允许? (y/a/n) ", end="")
+        _plain(f"\n需要确认 {name}: {preview}")
+
+    if _menu_supported():
+        if _console:
+            _console.print("[dim]↑↓ 选择，Enter 确认，Esc 拒绝（或直接按 y/a/n）[/]")
+        else:
+            _plain("↑↓ 选择，Enter 确认，Esc 拒绝（或直接按 y/a/n）")
+        choice = _menu_select(_CONFIRM_OPTIONS)
+        info(f"→ {dict(_CONFIRM_OPTIONS)[choice]}")
+        return choice
+
+    # 降级：非 TTY（管道等）用原来的文本输入
+    if _console:
+        _console.print("[dim]允许? (y=本次 / a=本会话总是 / n=拒绝)[/] ", end="")
+    else:
+        _plain("允许? (y/a/n) ", end="")
     try:
         ans = _safe_input().strip().lower()
     except EOFError:
