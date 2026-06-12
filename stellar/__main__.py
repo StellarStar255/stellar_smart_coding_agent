@@ -22,9 +22,6 @@ from . import ui
 
 LEGACY_SESSION_FILE = os.path.join(".stellar", "session.json")
 
-IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp")
-
-
 def is_command(line: str) -> bool:
     """判断输入是否是 /命令。
 
@@ -39,18 +36,10 @@ def is_command(line: str) -> bool:
 def extract_images(text: str) -> list[str]:
     """从输入文本里找出指向真实图片文件的路径。
 
-    终端粘贴/拖拽图片时通常会插入文件路径。按空白切分 token
-    （兼容拖拽产生的「反斜杠转义空格」），凡是以图片扩展名结尾
-    且文件真实存在的，就当作要发给模型的图片。
+    终端粘贴/拖拽图片时通常会插入文件路径；识别逻辑在 ui.find_image_tokens
+    （粘贴占位符功能也用它）。
     """
-    images = []
-    for token in re.findall(r"(?:\\ |\S)+", text):
-        token = token.strip("'\"").replace("\\ ", " ")
-        if token.lower().endswith(IMAGE_EXTS):
-            path = os.path.abspath(os.path.expanduser(token))
-            if os.path.isfile(path):
-                images.append(path)
-    return images
+    return [path for _token, path in ui.find_image_tokens(text)]
 
 
 def parse_args() -> argparse.Namespace:

@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import sys
 from typing import Any
@@ -24,6 +25,17 @@ try:
     import readline
 except ImportError:  # Windows 等环境没有 readline
     readline = None  # type: ignore[assignment]
+
+try:
+    # prompt_toolkit 能接管整个输入行，比 readline 多一个关键能力：
+    # 拦截 bracketed-paste 粘贴事件——粘贴图片路径时实时替换成
+    # [Image #N] 占位符（提交时再还原），输入框不再被长路径刷屏。
+    from prompt_toolkit import PromptSession
+    from prompt_toolkit.formatted_text import ANSI
+    from prompt_toolkit.key_binding import KeyBindings
+    from prompt_toolkit.keys import Keys
+except ImportError:  # prompt_toolkit 可选，缺了就退回 readline
+    PromptSession = None  # type: ignore[assignment,misc]
 
 
 def ensure_utf8_io() -> None:
@@ -365,7 +377,9 @@ def _sanitize_input(s: str) -> str:
     字符会污染消息——比如让图片路径不再以 .png 结尾而识别失败。
     """
     s = _CSI_RE.sub("", s)
-    return "".join(ch for ch in s if ch == "\t" or (ord(ch) >= 32 and ord(ch) != 127))
+    return "".join(
+        ch for ch in s if ch in "\t\n" or (ord(ch) >= 32 and ord(ch) != 127)
+    )
 
 
 def _safe_input(prompt: str = "") -> str:
@@ -377,9 +391,77 @@ def _safe_input(prompt: str = "") -> str:
         return ""
 
 
+# ---- 图片路径识别与粘贴占位符 ----
+
+IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp")
+
+
+def find_image_tokens(text: str) -> list[tuple[str, str]]:
+    """找出文本里指向真实图片文件的 token。
+
+    返回 (原始 token, 绝对路径) 列表。按空白切分 token（兼容拖拽产生的
+    「反斜杠转义空格」），凡是以图片扩展名结尾且文件真实存在的都算。
+    """
+    found = []
+    for token in re.findall(r"(?:\\ |\S)+", text):
+        cleaned = token.strip("'\"").replace("\\ ", " ")
+        if cleaned.lower().endswith(IMAGE_EXTS):
+            path = os.path.abspath(os.path.expanduser(cleaned))
+            if os.path.isfile(path):
+                found.append((token, path))
+    return found
+
+
+# [Image #N] -> 原始路径 token。整个会话期间保留，这样用上键
+# 调出带占位符的历史输入重发时仍能还原。
+_placeholder_map: dict[str, str] = {}
+_image_counter = 0
+
+
+def _replace_image_tokens(pasted: str) -> str:
+    """把粘贴内容里的图片路径替换成 [Image #N] 占位符。"""
+    global _image_counter
+    for token, _path in find_image_tokens(pasted):
+        _image_counter += 1
+        ph = f"[Image #{_image_counter}]"
+        _placeholder_map[ph] = token
+        pasted = pasted.replace(token, ph, 1)
+    return pasted
+
+
+def _expand_placeholders(line: str) -> str:
+    """提交时把占位符还原成真实路径，下游 extract_images 照常工作。"""
+    for ph, token in _placeholder_map.items():
+        if ph in line:
+            line = line.replace(ph, token)
+    return line
+
+
+# ---- 用户输入 ----
+
+_pt_session: Any = None
+
+
+def _pt_prompt() -> str:
+    """prompt_toolkit 输入：行编辑 + 历史 + 粘贴图片显示为占位符。"""
+    global _pt_session
+    if _pt_session is None:
+        kb = KeyBindings()
+
+        @kb.add(Keys.BracketedPaste)
+        def _(event: Any) -> None:
+            event.current_buffer.insert_text(_replace_image_tokens(event.data))
+
+        _pt_session = PromptSession(key_bindings=kb)
+    print()
+    return _pt_session.prompt(ANSI("\x1b[1;36m›\x1b[0m "))
+
+
 def user_prompt() -> str:
-    # 提示符要交给 input() 渲染而不能先 print：readline 重绘行
-    # （长行折行、Ctrl-U 等）时需要知道提示符宽度，否则光标会错位。
+    if PromptSession is not None and sys.stdin.isatty() and sys.stdout.isatty():
+        return _sanitize_input(_expand_placeholders(_pt_prompt()))
+    # 降级：readline + input()。提示符要交给 input() 渲染而不能先 print：
+    # readline 重绘行（长行折行、Ctrl-U 等）时需要知道提示符宽度。
     if readline and "libedit" not in (readline.__doc__ or ""):
         # GNU readline：颜色码用 \001..\002 标记为「不占宽度」
         prompt = "\n\001\x1b[1;36m\002›\001\x1b[0m\002 "
