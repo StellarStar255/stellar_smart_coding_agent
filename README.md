@@ -116,6 +116,7 @@ Claude 和 OpenAI 的工具调用格式完全不同：
 - **多会话 + 持久化**：每回合自动存到 `.stellar/sessions/<名字>.json`；支持命名、`/sessions` 列表、切换、删除、`--resume` 恢复。
 - **流式显示工具调用**：模型一决定调用工具就实时提示「→ 准备调用 X…」。
 - **diff 预览**：写/编辑文件在确认前展示彩色 unified diff，看清改动再批准。
+- **前台模式**：`bash` 工具支持 `foreground=true`，把 TTY 借给子进程运行交互式/全屏程序（curses 游戏、vim 等），退出后控制权交还 REPL。
 - **健壮性**：失败回合自动回滚，避免破坏 user/assistant 交替；非 UTF-8 终端下中文输入不崩溃。
 
 ## 可以继续扩展的方向

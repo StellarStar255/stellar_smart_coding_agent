@@ -27,6 +27,9 @@ def build_system_prompt(workdir: str) -> str:
 - 遵循项目已有的代码风格、命名和约定。改动后如有测试/类型检查，尽量运行验证。
 - 面对多步骤的复杂任务，先用 todo_write 列出计划并随进度更新状态。
 - 探索性的、上下文消耗大的子任务，可委派给 task 子 agent。
+- 用户要运行需要 TTY 的交互式/全屏程序（curses 游戏、vim 等）时，用 bash 工具的
+  foreground=true 让它接管用户终端运行；若程序需要长期挂着（如开发服务器），
+  在 macOS 上可用 osascript 让 Terminal 开新窗口运行，避免占住 REPL。
 - 任务完成后直接停下，不要画蛇添足地继续改动无关内容。
 
 # 安全
