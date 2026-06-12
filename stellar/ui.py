@@ -18,6 +18,13 @@ try:
 except ImportError:  # rich 可选
     _console = None
 
+try:
+    # 仅导入就能让 input() 获得行编辑能力：方向键移光标、上下键翻历史、
+    # Ctrl-A/E 等。没有它，按方向键会往输入行里塞 ^[[C 这样的转义序列。
+    import readline
+except ImportError:  # Windows 等环境没有 readline
+    readline = None  # type: ignore[assignment]
+
 
 def ensure_utf8_io() -> None:
     """强制把 stdin/stdout/stderr 切到 UTF-8。
@@ -361,18 +368,22 @@ def _sanitize_input(s: str) -> str:
     return "".join(ch for ch in s if ch == "\t" or (ord(ch) >= 32 and ord(ch) != 127))
 
 
-def _safe_input() -> str:
+def _safe_input(prompt: str = "") -> str:
     """读一行输入，碰到无法解码的字节时不崩溃，提示用户重输。"""
     try:
-        return _sanitize_input(input())
+        return _sanitize_input(input(prompt))
     except UnicodeDecodeError:
         error("（输入编码无法识别，已忽略本行，请重新输入）")
         return ""
 
 
 def user_prompt() -> str:
-    if _console:
-        _console.print("\n[bold cyan]›[/] ", end="")
+    # 提示符要交给 input() 渲染而不能先 print：readline 重绘行
+    # （长行折行、Ctrl-U 等）时需要知道提示符宽度，否则光标会错位。
+    if readline and "libedit" not in (readline.__doc__ or ""):
+        # GNU readline：颜色码用 \001..\002 标记为「不占宽度」
+        prompt = "\n\001\x1b[1;36m\002›\001\x1b[0m\002 "
     else:
-        print("\n› ", end="", flush=True)
-    return _safe_input()
+        # libedit（macOS 默认）对标记支持不佳，用素色保对齐
+        prompt = "\n› "
+    return _safe_input(prompt)
