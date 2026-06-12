@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import re
 import sys
 from typing import Any
 
@@ -214,10 +215,25 @@ def error(msg: str) -> None:
         _plain(msg)
 
 
+# CSI 转义序列（如括号粘贴标记 \x1b[200~ / 方向键 \x1b[A）
+_CSI_RE = re.compile(r"\x1b\[[0-9;?]*[~A-Za-z]")
+
+
+def _sanitize_input(s: str) -> str:
+    """清洗输入里的终端控制字符。
+
+    粘贴/拖拽时，终端可能把转义序列混进 input() 读到的内容里
+    （比如括号粘贴的 \\x1b[200~ 标记、或裸 ESC 字符）。这些不可见
+    字符会污染消息——比如让图片路径不再以 .png 结尾而识别失败。
+    """
+    s = _CSI_RE.sub("", s)
+    return "".join(ch for ch in s if ch == "\t" or (ord(ch) >= 32 and ord(ch) != 127))
+
+
 def _safe_input() -> str:
     """读一行输入，碰到无法解码的字节时不崩溃，提示用户重输。"""
     try:
-        return input()
+        return _sanitize_input(input())
     except UnicodeDecodeError:
         error("（输入编码无法识别，已忽略本行，请重新输入）")
         return ""
