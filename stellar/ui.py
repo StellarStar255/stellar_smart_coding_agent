@@ -400,11 +400,12 @@ def find_image_tokens(text: str) -> list[tuple[str, str]]:
     """找出文本里指向真实图片文件的 token。
 
     返回 (原始 token, 绝对路径) 列表。按空白切分 token（兼容拖拽产生的
-    「反斜杠转义空格」），凡是以图片扩展名结尾且文件真实存在的都算。
+    「反斜杠转义空格」、Claude Code/Gemini 风格的 @ 前缀），凡是以图片
+    扩展名结尾且文件真实存在的都算。
     """
     found = []
     for token in re.findall(r"(?:\\ |\S)+", text):
-        cleaned = token.strip("'\"").replace("\\ ", " ")
+        cleaned = token.strip("'\"").lstrip("@").strip("'\"").replace("\\ ", " ")
         if cleaned.lower().endswith(IMAGE_EXTS):
             path = os.path.abspath(os.path.expanduser(cleaned))
             if os.path.isfile(path):
