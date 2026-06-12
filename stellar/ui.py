@@ -395,21 +395,38 @@ def _safe_input(prompt: str = "") -> str:
 
 IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp")
 
+# 在任意文本里匹配图片路径：以 / 或 ~ 开头、以图片扩展名结尾。
+# 非贪婪 + 不吃引号/空白（「\ 」转义空格除外），这样路径和后续文字
+# 粘连时（粘贴路径后直接打字，如 …png你看到了什么？）也能切出来。
+_IMG_PATH_RE = re.compile(
+    r"[~/](?:\\ |[^\s'\"])*?\.(?:png|jpe?g|gif|webp|bmp)",
+    re.IGNORECASE,
+)
+
 
 def find_image_tokens(text: str) -> list[tuple[str, str]]:
-    """找出文本里指向真实图片文件的 token。
+    """找出文本里指向真实图片文件的片段。
 
-    返回 (原始 token, 绝对路径) 列表。按空白切分 token（兼容拖拽产生的
-    「反斜杠转义空格」、Claude Code/Gemini 风格的 @ 前缀），凡是以图片
-    扩展名结尾且文件真实存在的都算。
+    返回 (原始片段, 绝对路径) 列表。两轮识别：
+    1. 按空白切分 token（兼容拖拽的「反斜杠转义空格」、Claude Code/Gemini
+       风格的 @ 前缀），以图片扩展名结尾且文件存在的都算；
+    2. 正则兜底——路径和前后文字粘连、没有空白边界时也能找到。
     """
-    found = []
+    found: list[tuple[str, str]] = []
+    seen: set[str] = set()
+
+    def add(token: str, cleaned: str) -> None:
+        path = os.path.abspath(os.path.expanduser(cleaned))
+        if path not in seen and os.path.isfile(path):
+            seen.add(path)
+            found.append((token, path))
+
     for token in re.findall(r"(?:\\ |\S)+", text):
         cleaned = token.strip("'\"").lstrip("@").strip("'\"").replace("\\ ", " ")
         if cleaned.lower().endswith(IMAGE_EXTS):
-            path = os.path.abspath(os.path.expanduser(cleaned))
-            if os.path.isfile(path):
-                found.append((token, path))
+            add(token, cleaned)
+    for m in _IMG_PATH_RE.finditer(text):
+        add(m.group(0), m.group(0).replace("\\ ", " "))
     return found
 
 
