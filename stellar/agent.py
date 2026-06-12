@@ -45,6 +45,8 @@ class Agent:
         self.provider = provider or build_provider(config)
         self.tools = tools if tools is not None else default_tools()
         self.tool_map = {t.name: t for t in self.tools}
+        # 没传自定义 prompt 时按回合动态重建（记忆更新后无需重启即生效）
+        self._dynamic_prompt = system_prompt is None
         self.system_prompt = system_prompt or build_system_prompt(config.workdir)
         self.history = History()
         self.permissions = PermissionManager(yolo=config.yolo)
@@ -60,6 +62,8 @@ class Agent:
 
     def run_turn(self, user_input: str, images: list[str] | None = None) -> None:
         """处理一次用户输入（可附带图片路径），跑完整个 agentic loop 直到不再需要工具。"""
+        if self._dynamic_prompt:
+            self.system_prompt = build_system_prompt(self.config.workdir)
         self.history.add_user(user_input, images)
         self._maybe_compact()
         try:

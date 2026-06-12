@@ -58,6 +58,7 @@ def help_text() -> None:
         "/compact         手动压缩历史",
         "/tokens          显示上一回合 token 用量",
         "/yolo            切换 yolo 模式（跳过所有确认）",
+        "/memory          查看持久记忆（全局 + 项目）",
         "",
         "/sessions        列出所有会话",
         "/session <名字>  切换/新建到指定会话",

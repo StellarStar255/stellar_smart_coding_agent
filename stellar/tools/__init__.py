@@ -8,6 +8,7 @@ from .edit_file import EditFileTool
 from .glob_tool import GlobTool
 from .grep import GrepTool
 from .ls import LSTool
+from .memory_tool import MemoryWriteTool
 from .read_file import ReadFileTool
 from .todo import TodoWriteTool
 from .web import WebFetchTool, WebSearchTool
@@ -25,6 +26,7 @@ def default_tools(include_task: bool = True) -> list[Tool]:
         GlobTool(),
         LSTool(),
         TodoWriteTool(),
+        MemoryWriteTool(),
         WebFetchTool(),
         WebSearchTool(),
     ]

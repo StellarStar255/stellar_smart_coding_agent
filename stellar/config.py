@@ -42,6 +42,9 @@ class Config:
     workdir: str = "."
     # yolo 模式：跳过所有权限确认（危险，自用学习时方便）
     yolo: bool = False
+    # 兼容会丢弃 system 消息的 OpenAI 代理（如 Claude Code 包装层）：
+    # 开启后把 system prompt 包进第一条 user 消息发送
+    system_in_user: bool = False
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -53,6 +56,8 @@ class Config:
             anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY"),
             openai_api_key=os.environ.get("OPENAI_API_KEY"),
             openai_base_url=os.environ.get("OPENAI_BASE_URL"),
+            system_in_user=os.environ.get("STELLAR_SYSTEM_IN_USER", "")
+            in ("1", "true", "yes"),
         )
 
     def resolved_model(self) -> str:

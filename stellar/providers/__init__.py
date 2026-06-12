@@ -23,6 +23,7 @@ def build_provider(config: Config) -> Provider:
             model=config.resolved_model(),
             base_url=config.openai_base_url,
             max_tokens=config.max_tokens,
+            system_in_user=config.system_in_user,
         )
     raise ValueError(f"未知 provider: {config.provider}")
 

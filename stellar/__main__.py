@@ -111,6 +111,16 @@ def handle_command(cmd: str, agent: Agent) -> bool:
     elif head == "/yolo":
         agent.permissions.yolo = not agent.permissions.yolo
         ui.info(f"yolo 模式: {'开' if agent.permissions.yolo else '关'}")
+    elif head == "/memory":
+        from . import memory
+
+        for label, path in (
+            ("全局记忆", memory.global_path()),
+            ("项目记忆", memory.project_path(agent.config.workdir)),
+        ):
+            content = memory.read(path)
+            ui.info(f"{label} ({path}):")
+            ui.info(content if content else "（空）")
     # ---- 多会话命令 ----
     elif head == "/sessions":
         infos = agent.sessions.list() if agent.sessions else []

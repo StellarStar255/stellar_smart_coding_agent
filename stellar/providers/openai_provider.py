@@ -31,6 +31,7 @@ class OpenAIProvider(Provider):
         model: str,
         base_url: str | None = None,
         max_tokens: int = 8096,
+        system_in_user: bool = False,
     ):
         from openai import OpenAI
 
@@ -39,6 +40,9 @@ class OpenAIProvider(Provider):
         self.client = OpenAI(api_key=api_key, base_url=base_url)
         self.model = model
         self.max_tokens = max_tokens
+        # 某些代理（如 Claude Code 包装层）会丢弃/替换 system 消息，
+        # 开启后改为把 system prompt 包进第一条 user 消息
+        self.system_in_user = system_in_user
 
     # ---- 内部格式 -> OpenAI 格式 ----
 
@@ -109,6 +113,25 @@ class OpenAIProvider(Provider):
             for t in tools
         ]
 
+    @staticmethod
+    def _inject_system_into_first_user(
+        oai_messages: list[dict[str, Any]], system: str
+    ) -> None:
+        """把 system prompt 包成标签块，前置到第一条 user 消息里。
+
+        system 消息本身仍保留（对正常端点无害）；这里是给会丢弃
+        system 的代理兜底——user 消息总是会透传的。
+        """
+        block = f"<system-instructions>\n{system}\n</system-instructions>\n\n"
+        for m in oai_messages:
+            if m["role"] != "user":
+                continue
+            if isinstance(m["content"], list):  # 多模态消息
+                m["content"] = [{"type": "text", "text": block}] + m["content"]
+            else:
+                m["content"] = block + (m["content"] or "")
+            return
+
     # ---- 流式 ----
 
     def stream(
@@ -119,6 +142,8 @@ class OpenAIProvider(Provider):
     ) -> Iterator[StreamEvent]:
         oai_messages = [{"role": "system", "content": system}]
         oai_messages.extend(self._convert_messages(messages))
+        if self.system_in_user:
+            self._inject_system_into_first_user(oai_messages, system)
         oai_tools = self._convert_tools(tools)
 
         stream = self.client.chat.completions.create(

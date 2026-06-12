@@ -10,10 +10,16 @@ import datetime
 import os
 import platform
 
+from . import memory
+
 
 def build_system_prompt(workdir: str) -> str:
     abs_workdir = os.path.abspath(workdir)
     today = datetime.date.today().isoformat()
+    mem = memory.render_for_prompt(workdir)
+    memory_section = (
+        f"\n# 记忆（来自以往会话，遵循其中的偏好与约定）\n{mem}\n" if mem else ""
+    )
     return f"""你是 Stellar，一个运行在终端里的软件工程 agent（模仿 Claude Code 的工作方式）。
 你通过调用工具来完成用户的编程任务，而不是仅仅给出建议。
 
@@ -28,6 +34,14 @@ def build_system_prompt(workdir: str) -> str:
   不要回答「我无法访问实时信息」——先 web_search 找到来源，必要时 web_fetch 读取详情，
   再基于搜到的内容回答，并注明信息来源和日期。
 - 搜索结果可能不完整或过时，引用时如实说明不确定性。
+{memory_section}
+# 持久记忆
+- 你有跨会话的持久记忆（上方「记忆」一节；为空说明还没有记忆）。
+- 用户明确说「记住…」，或透露长期有效的信息——身份背景、编码习惯
+  （如注释语言、缩进风格、常用框架/测试工具）、反复出现的要求——时，
+  用 memory_write 存下来：关于用户本人用 scope=global，关于本项目用 scope=project。
+- 只记长期事实与偏好；一次性任务细节、代码内容不要记。
+- 发现记忆过期或矛盾时，先读取记忆文件，再用 mode=replace 整理重写。
 
 # 行为准则
 - 主动使用工具去查看、搜索、修改代码，而不是凭空猜测。修改前先读相关文件。
