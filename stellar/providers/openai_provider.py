@@ -21,7 +21,7 @@ from ..messages import (
     ToolSpec,
     Usage,
 )
-from .base import Provider
+from .base import Provider, encode_image
 
 
 class OpenAIProvider(Provider):
@@ -46,7 +46,29 @@ class OpenAIProvider(Provider):
         out: list[dict[str, Any]] = []
         for m in messages:
             if m.role == "user":
-                out.append({"role": "user", "content": m.text})
+                if m.images:
+                    # 带图片时 content 是多模态块列表，图片用 data URI 内联
+                    content: list[dict[str, Any]] = []
+                    for path in m.images:
+                        enc = encode_image(path)
+                        if enc:
+                            content.append(
+                                {
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": f"data:{enc[0]};base64,{enc[1]}"
+                                    },
+                                }
+                            )
+                        else:
+                            content.append(
+                                {"type": "text", "text": f"[图片已无法读取: {path}]"}
+                            )
+                    if m.text:
+                        content.append({"type": "text", "text": m.text})
+                    out.append({"role": "user", "content": content})
+                else:
+                    out.append({"role": "user", "content": m.text})
             elif m.role == "assistant":
                 msg: dict[str, Any] = {"role": "assistant", "content": m.text or None}
                 if m.tool_calls:

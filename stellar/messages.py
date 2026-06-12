@@ -34,13 +34,16 @@ class Message:
     """对话历史中的一条消息。
 
     role:
-      - "user"      : 用户输入（text）
+      - "user"      : 用户输入（text + 可选的 images）
       - "assistant" : 模型回复（text + 可选的 tool_calls）
       - "tool"      : 工具执行结果（tool_results，可能一次多个）
     """
 
     role: str
     text: str = ""
+    # 随消息附带的图片，存文件路径而非 base64：历史存档因此保持轻量，
+    # 由 provider 在发送时才读文件编码；文件已被删除时由 provider 容错。
+    images: list[str] = field(default_factory=list)
     tool_calls: list[ToolCall] = field(default_factory=list)
     tool_results: list[ToolResult] = field(default_factory=list)
 
@@ -48,6 +51,7 @@ class Message:
         return {
             "role": self.role,
             "text": self.text,
+            "images": list(self.images),
             "tool_calls": [
                 {"id": tc.id, "name": tc.name, "arguments": tc.arguments}
                 for tc in self.tool_calls
@@ -67,6 +71,7 @@ class Message:
         return cls(
             role=d["role"],
             text=d.get("text", ""),
+            images=d.get("images", []),
             tool_calls=[
                 ToolCall(tc["id"], tc["name"], tc["arguments"])
                 for tc in d.get("tool_calls", [])

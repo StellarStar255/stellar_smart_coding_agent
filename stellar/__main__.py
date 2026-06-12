@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import sys
 
 from .agent import Agent
@@ -20,6 +21,36 @@ from .sessions import SessionManager
 from . import ui
 
 LEGACY_SESSION_FILE = os.path.join(".stellar", "session.json")
+
+IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp")
+
+
+def is_command(line: str) -> bool:
+    """判断输入是否是 /命令。
+
+    不能简单用 startswith("/")：以 / 开头的还可能是文件路径
+    （比如终端把粘贴的图片存盘后插入的 /Users/...png）。
+    命令的形状是「/ + 纯字母」，路径里必然还有别的字符。
+    """
+    head = line.split(maxsplit=1)[0]
+    return re.fullmatch(r"/[A-Za-z]+", head) is not None
+
+
+def extract_images(text: str) -> list[str]:
+    """从输入文本里找出指向真实图片文件的路径。
+
+    终端粘贴/拖拽图片时通常会插入文件路径。按空白切分 token
+    （兼容拖拽产生的「反斜杠转义空格」），凡是以图片扩展名结尾
+    且文件真实存在的，就当作要发给模型的图片。
+    """
+    images = []
+    for token in re.findall(r"(?:\\ |\S)+", text):
+        token = token.strip("'\"").replace("\\ ", " ")
+        if token.lower().endswith(IMAGE_EXTS):
+            path = os.path.abspath(os.path.expanduser(token))
+            if os.path.isfile(path):
+                images.append(path)
+    return images
 
 
 def parse_args() -> argparse.Namespace:
@@ -157,7 +188,7 @@ def main() -> int:
     # 单次非交互模式
     if args.prompt:
         agent.interactive = True  # 仍然显示输出/确认
-        agent.run_turn(args.prompt)
+        agent.run_turn(args.prompt, images=extract_images(args.prompt))
         return 0
 
     # 交互式 REPL
@@ -173,14 +204,17 @@ def main() -> int:
         line = line.strip()
         if not line:
             continue
-        if line.startswith("/"):
+        if is_command(line):
             if handle_command(line, agent):
                 ui.info("再见。")
                 return 0
             continue
 
+        images = extract_images(line)
+        if images:
+            ui.info(f"（检测到 {len(images)} 张图片，将随消息一起发送）")
         try:
-            agent.run_turn(line)
+            agent.run_turn(line, images=images)
         except KeyboardInterrupt:
             ui.info("\n（已中断当前回合）")
         except Exception as e:  # noqa: BLE001

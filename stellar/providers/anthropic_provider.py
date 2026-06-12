@@ -20,7 +20,7 @@ from ..messages import (
     ToolSpec,
     Usage,
 )
-from .base import Provider
+from .base import Provider, encode_image
 
 
 class AnthropicProvider(Provider):
@@ -39,7 +39,31 @@ class AnthropicProvider(Provider):
         out: list[dict[str, Any]] = []
         for m in messages:
             if m.role == "user":
-                out.append({"role": "user", "content": m.text})
+                if m.images:
+                    # 带图片时 content 必须是内容块列表：图片在前，文字在后
+                    content = []
+                    for path in m.images:
+                        enc = encode_image(path)
+                        if enc:
+                            content.append(
+                                {
+                                    "type": "image",
+                                    "source": {
+                                        "type": "base64",
+                                        "media_type": enc[0],
+                                        "data": enc[1],
+                                    },
+                                }
+                            )
+                        else:
+                            content.append(
+                                {"type": "text", "text": f"[图片已无法读取: {path}]"}
+                            )
+                    if m.text:
+                        content.append({"type": "text", "text": m.text})
+                    out.append({"role": "user", "content": content})
+                else:
+                    out.append({"role": "user", "content": m.text})
             elif m.role == "assistant":
                 content: list[dict[str, Any]] = []
                 if m.text:

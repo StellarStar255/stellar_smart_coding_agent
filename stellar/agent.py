@@ -58,9 +58,9 @@ class Agent:
 
     # ---------- 主循环 ----------
 
-    def run_turn(self, user_input: str) -> None:
-        """处理一次用户输入，跑完整个 agentic loop 直到不再需要工具。"""
-        self.history.add_user(user_input)
+    def run_turn(self, user_input: str, images: list[str] | None = None) -> None:
+        """处理一次用户输入（可附带图片路径），跑完整个 agentic loop 直到不再需要工具。"""
+        self.history.add_user(user_input, images)
         self._maybe_compact()
         try:
             self._loop()
@@ -270,7 +270,8 @@ def _render_transcript(messages: list[Message]) -> str:
     parts = []
     for m in messages:
         if m.role == "user":
-            parts.append(f"用户: {m.text}")
+            note = f" [附图 {len(m.images)} 张]" if m.images else ""
+            parts.append(f"用户: {m.text}{note}")
         elif m.role == "assistant":
             if m.text:
                 parts.append(f"助手: {m.text}")

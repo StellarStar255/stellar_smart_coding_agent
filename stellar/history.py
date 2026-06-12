@@ -22,8 +22,8 @@ class History:
     def add(self, message: Message) -> None:
         self.messages.append(message)
 
-    def add_user(self, text: str) -> None:
-        self.add(Message(role="user", text=text))
+    def add_user(self, text: str, images: list[str] | None = None) -> None:
+        self.add(Message(role="user", text=text, images=images or []))
 
     def __len__(self) -> int:
         return len(self.messages)
