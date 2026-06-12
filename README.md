@@ -46,7 +46,7 @@ python -m stellar --resume login-ui             # 恢复指定名字的会话
 python -m stellar --yolo                         # 跳过所有确认（慎用）
 ```
 
-> 安装成全局命令后（见 [安装与设置文档](docs/安装与设置.md)），上面的 `python -m stellar` 都可直接换成 `stellar`，且会在你**当前所在目录**启动。
+> 安装成全局命令后（见 [安装与设置文档](docs/setup.md)），上面的 `python -m stellar` 都可直接换成 `stellar`，且会在你**当前所在目录**启动。
 
 > 也可以用一键脚本 `./run.sh`（自动建 venv、装依赖、检查 .env），参数会原样透传：
 > `./run.sh --resume`、`./run.sh -p "..."` 等。

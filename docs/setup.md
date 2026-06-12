@@ -69,18 +69,39 @@ STELLAR_MODEL=gpt-4o
 
 ---
 
-## 三、设置成全局命令 `stellar`
+## 三、在任意文件夹启动 agent
 
 目标：在**任何文件夹**下输入 `stellar`，就在**当前文件夹**启动 agent。
 
 ### 原理
 
-- 启动器脚本放在 `~/.local/bin/stellar`（该目录已在 PATH 上，无需 sudo）。
-- 脚本**不切换目录**，所以 Stellar 把你所在的文件夹当作工作目录。
-- 用 `PYTHONPATH` 指向项目，让 `python -m stellar` 能在任意目录被导入。
+- Stellar 通过 `--workdir` 参数指定工作目录（定义在 `stellar/__main__.py`），所有工具（读写文件、bash 等）都以它为根。
+- `run.sh` 开头会 `cd` 到项目目录，所以 `--workdir` 必须传**绝对路径**；alias 里用 `"$(pwd)"` 在你敲命令时就地展开，正好是绝对路径。
 - `config.py` 会同时加载「当前目录的 `.env`」和「项目目录的 `.env`」，所以换到任何文件夹都能读到 key。
 
-### 启动器内容（`~/.local/bin/stellar`）
+### 当前方案：zsh alias（已配置，2026-06）
+
+`~/.zshrc` 末尾已加入：
+
+```bash
+# Stellar coding agent — 在任意目录以当前目录为工作目录启动
+alias stellar='/Users/huangqiliang/Documents/Stellar_Mac/stellar_smart_coding_agent/run.sh --workdir "$(pwd)"'
+```
+
+新开终端或执行 `source ~/.zshrc` 后生效。验证：
+
+```bash
+cd ~/任意项目
+stellar        # 启动横幅里应显示 cwd=当前目录
+```
+
+走 `run.sh` 还有一个附带好处：依赖有更新时会自动安装。
+
+> 注意：alias 只在 zsh 交互式终端里生效。如果要在脚本、cron 或其他 shell 里调用，请用下面的备选方案。
+
+### 备选方案：`~/.local/bin/stellar` 启动器脚本
+
+不依赖 shell alias 的做法——把下面内容存为 `~/.local/bin/stellar` 并 `chmod +x`（该目录已在 PATH 上）：
 
 ```bash
 #!/usr/bin/env bash
@@ -95,22 +116,24 @@ fi
 exec env PYTHONPATH="$PROJ" "$PY" -m stellar "$@"
 ```
 
-### 安装步骤（已完成，仅作记录）
+它**不切换目录**，Stellar 默认把你所在的文件夹当作工作目录（`--workdir` 默认值是 `.`）。若同时配置了 alias，zsh 里 alias 优先。
+
+### 临时一次性的用法
+
+不做任何配置，也可以直接指定目录启动：
 
 ```bash
-# 1. 启动器已写入 ~/.local/bin/stellar，并加了可执行权限：
-chmod +x ~/.local/bin/stellar
-
-# 2. 确认 ~/.local/bin 在 PATH 上（macOS zsh）：
-echo "$PATH" | tr ':' '\n' | grep .local/bin
-#    如果没有，在 ~/.zshrc 末尾加一行后重开终端：
-#    export PATH="$HOME/.local/bin:$PATH"
-
-# 3. 验证：
-which stellar       # 应输出 /Users/huangqiliang/.local/bin/stellar
+cd /Users/huangqiliang/Documents/Stellar_Mac/stellar_smart_coding_agent
+./run.sh --workdir /绝对路径/目标文件夹
 ```
 
-> 新开的终端里若 `stellar` 找不到，执行 `hash -r` 刷新命令缓存，或重开终端。
+或者在目标文件夹里直接调用项目的 venv：
+
+```bash
+cd /目标文件夹
+PYTHONPATH=/Users/huangqiliang/Documents/Stellar_Mac/stellar_smart_coding_agent \
+  /Users/huangqiliang/Documents/Stellar_Mac/stellar_smart_coding_agent/.venv/bin/python -m stellar
+```
 
 ---
 
@@ -162,14 +185,17 @@ stellar --provider anthropic  # 临时切换 provider
 | `缺少 OPENAI_API_KEY` | `.env` 没填 key，或 `STELLAR_PROVIDER` 跟填的 key 对不上 |
 | 换目录后报缺 key | 确认用的是全局 `stellar` 命令（它会兜底读项目 `.env`），而不是别的方式启动 |
 | 中文输入报 `UnicodeDecodeError` | 已修复（程序启动会强制 UTF-8）；若仍出现，重开终端 |
-| `stellar: command not found` | `hash -r` 刷新，或确认 `~/.local/bin` 在 PATH 上 |
-| 移动了项目目录 | 改 `~/.local/bin/stellar` 里的 `PROJ=` 那一行 |
+| `stellar: command not found` | alias 只在新终端/`source ~/.zshrc` 后生效；若用启动器脚本，`hash -r` 刷新或确认 `~/.local/bin` 在 PATH 上 |
+| 工作目录不是当前文件夹 | 确认是通过 alias 启动的（`type stellar` 应显示 alias）；直接跑 `./run.sh` 不带 `--workdir` 时工作目录是项目目录 |
+| 移动了项目目录 | 改 `~/.zshrc` 里 alias 的路径（以及 `~/.local/bin/stellar` 的 `PROJ=`，若使用了启动器） |
 
 ---
 
 ## 六、卸载
 
 ```bash
-rm ~/.local/bin/stellar          # 删除全局命令
+# 删除 ~/.zshrc 末尾的 stellar alias（两行：注释 + alias）
+# 若装过启动器脚本：
+rm -f ~/.local/bin/stellar
 # 项目本身和各目录下的 .stellar/ 会话目录按需手动删除
 ```
